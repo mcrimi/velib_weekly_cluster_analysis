@@ -235,7 +235,7 @@ It seems that I arrived at the same clustering.
 # Excercise 3 - The Vélib data
 
 ```{r}
-load("C:/Users/MCRIMI/Google Drive/Grad school/DSTI/StatLearningHighDimData/Exam/velib.Rdata")
+load("velib.Rdata")
 ```
 
 ## Pretreatment et descriptive analysis
