@@ -8,3 +8,4 @@ report/.quarto/
 report/index.html
 dist/
 node_modules/
+.Rbuildignore
