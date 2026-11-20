@@ -78,6 +78,7 @@ data/raw/velib.Rdata                1,189 stations × 181 hours
      ├─ cluster    R/cluster.R    k-means · Ward · Gaussian mixtures
      │                            gap · silhouette · bootstrap · benchmark
      ├─ spatial    R/spatial.R    join counts, Moran's I, bonus stations
+     ├─ basemap    R/basemap.R    arrondissements and waterways, simplified
      ├─ report     report/index.qmd   Quarto
      └─ export     R/export.R     web/data/*.json ──→ web page
                                   web/test/fixtures.json ──→ parity test
@@ -100,8 +101,9 @@ in R *from the JSON as exported*, and `web/test/model.test.js` must reproduce
 them to nine decimal places.
 
 The page itself is plain HTML, CSS and ES modules, with no build step and no
-map tiles: the stations are drawn on a canvas in ink, and clusters differ by
-marker shape, not colour.
+map tiles. The stations are drawn on a canvas in ink, clusters differ by
+marker shape, not colour, and the outline of Paris underneath is 850 points of
+simplified open data (`R/basemap.R`), about 12 kB.
 
 ## Run it
 
@@ -110,8 +112,8 @@ Needs R 4.4, [Quarto](https://quarto.org) and Node 20 or later.
 ```sh
 Rscript -e 'renv::restore()'                         # packages, from renv.lock
 Rscript -e 'targets::tar_make()'                     # everything, about two minutes
-Rscript -e 'testthat::test_dir("tests/testthat")'    # 91 expectations
-npm test                                             # 17 tests, including R-to-JS parity
+Rscript -e 'testthat::test_dir("tests/testthat")'    # 164 expectations
+npm test                                             # 18 tests, including R-to-JS parity
 python3 -m http.server -d web 8000                   # the page, at http://localhost:8000
 ```
 
@@ -133,6 +135,13 @@ JCDecaux's open data service. I have not found a separate licence statement
 for the dataset itself. The MIT licence in this repository covers my code
 only, not the data. If you reuse the data, take it from `funFEM` and cite the
 paper.
+
+The base map under the stations (`data/raw/paris_arrondissements.geojson` and
+`data/raw/paris_waterways.geojson`) comes from the City of Paris open data
+portal, [opendata.paris.fr](https://opendata.paris.fr/): the datasets
+"Arrondissements" and "Plan de voirie - Voies d'eau", both published under the
+Open Database Licence (ODbL). It is drawn for the reader only and takes no
+part in the analysis.
 
 ## Limitations
 

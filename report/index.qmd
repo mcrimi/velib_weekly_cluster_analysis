@@ -101,6 +101,10 @@ station's coordinates and a flag for "bonus" stations, which sit on high ground.
 rewarded riders for returning bikes there, because people ride down from them and do not
 ride back up.
 
+The outline of Paris on the [web page](../) (arrondissements and waterways) is from the City
+of Paris open data portal, under the Open Database Licence. It is drawn for the reader and
+plays no part in the analysis.
+
 The recording starts on a Sunday at 11:00. Those first 13 hours are an incomplete day and
 are dropped, leaving `r ncol(X)` hours from Monday 00:00 to Sunday 23:00. There are no
 missing values.

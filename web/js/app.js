@@ -12,10 +12,12 @@ const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&
 const HOURS = 168;
 const DAY_TICKS = [0, 24, 48, 72, 96, 120, 144, 168];
 const START_STATION = "OPERA - CAPUCINES";
+const BASE_NOTE = "North is up. Hairlines are the arrondissements of Paris; the grey band is the Seine, with the canals to the north-east.";
 
 const state = { k: "4", view: "clusters", hour: 32, selected: -1, focus: null, uphill: false, playing: false };
 let stations = null;
 let story = null;
+let basemap = null;
 let layout = null;
 let timer = null;
 
@@ -62,10 +64,11 @@ function renderMap() {
     fill: hourFill,
     uphill: state.uphill ? stations.bonus : null,
     selected: state.selected,
+    base: basemap,
   });
   $("map-cap").textContent = state.view === "fill"
-    ? `${hourLabel(state.hour, stations.days)}. Each square is a station, and its area is the share of its docks holding a bike. North is up.`
-    : "Each mark is a station, drawn with the marker of its cluster; north is up. There is no base map: the stations alone draw the city. Click a station to see its week.";
+    ? `${hourLabel(state.hour, stations.days)}. Each square is a station, and its area is the share of its docks holding a bike. ${BASE_NOTE}`
+    : `Each mark is a station, drawn with the marker of its cluster. Click one to see its week. ${BASE_NOTE}`;
 }
 
 function renderLegend() {
@@ -311,6 +314,8 @@ async function start() {
     return;
   }
   stations.bonusSet = new Set(stations.bonus);
+  // The base map is a nicety: the page works without it.
+  load("data/basemap.json").then((data) => { basemap = data; renderMap(); }).catch((error) => console.warn(error));
   initControls();
   $("hour-out").textContent = hourLabel(state.hour, stations.days);
   setK(state.k);

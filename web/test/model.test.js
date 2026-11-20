@@ -8,6 +8,7 @@ const load = (path) => JSON.parse(readFileSync(new URL(path, import.meta.url)));
 const stations = load("../data/stations.json");
 const story = load("../data/story.json");
 const fixtures = load("./fixtures.json");
+const basemap = load("../data/basemap.json");
 
 test("the export has one week for every station", () => {
   assert.equal(stations.profile.length, stations.name.length);
@@ -129,4 +130,23 @@ test("the story carries the numbers the page quotes", () => {
   assert.equal(story.four.reduce((sum, g) => sum + g.n, 0), story.n);
   for (const row of story.spatial) assert.ok(row.observed > row.null_max);
   assert.equal(story.pca.loadings[0].length, 168);
+});
+
+test("the base map lines up with the stations", () => {
+  assert.equal(basemap.boundaries.length, 20);
+  assert.ok(basemap.water.length > 10);
+  assert.match(basemap.source, /Open Database Licence/);
+  const layout = fitMap(stations.x, stations.y, 600, 16);
+  // The same projection as the stations: a station's own coordinates land on its pixel.
+  assert.ok(Math.abs(layout.toX(stations.x[7]) - layout.px[7]) < 1e-3);
+  assert.ok(Math.abs(layout.toY(stations.y[7]) - layout.py[7]) < 1e-3);
+  for (const ring of [...basemap.boundaries, ...basemap.water]) {
+    assert.equal(ring.x.length, ring.y.length);
+    assert.ok(ring.x.length >= 4);
+    assert.ok(ring.x.every((x, i) => Number.isFinite(x) && Number.isFinite(ring.y[i])));
+    // Closed, and inside the canvas with room to spare.
+    assert.equal(ring.x[0], ring.x[ring.x.length - 1]);
+    assert.ok(ring.x.every((x) => layout.toX(x) > 0 && layout.toX(x) < 600));
+    assert.ok(ring.y.every((y) => layout.toY(y) > 0 && layout.toY(y) < layout.height));
+  }
 });

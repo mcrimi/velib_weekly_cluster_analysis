@@ -35,7 +35,13 @@ list(
   })),
   tar_target(bonus, bonus_table(velib, summary, kmeans_fits[[3]]$cluster)),
 
+  # Base map: boundaries and waterways, in the stations' coordinates
+  tar_target(boundaries_file, "data/raw/paris_arrondissements.geojson", format = "file"),
+  tar_target(water_file, "data/raw/paris_waterways.geojson", format = "file"),
+  tar_target(basemap, build_basemap(velib, boundaries_file, water_file)),
+
   # Exports for the web page
+  tar_target(basemap_json, export_basemap(basemap, "web/data/basemap.json"), format = "file"),
   tar_target(stations_json,
              export_stations(velib, summary, pca, kmeans_fits, "web/data/stations.json"),
              format = "file"),

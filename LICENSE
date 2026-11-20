@@ -22,4 +22,6 @@ SOFTWARE.
 
 This licence covers the code in this repository. The dataset in data/ was
 collected by Charles Bouveyron, Etienne Côme and Julien Jacques and is not
-covered by it; see the README for its source and terms.
+covered by it. The two GeoJSON files in data/raw/ are from the City of Paris
+open data portal under the Open Database Licence. See the README for sources
+and terms.

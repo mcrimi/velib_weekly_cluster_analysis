@@ -92,7 +92,7 @@
       <div class="result">
         <figure class="plate">
           <canvas id="stations" width="900" height="560" role="img" aria-label="Map of the 1,189 stations, each drawn with the marker of its cluster"></canvas>
-          <figcaption class="cap" id="map-cap">Each mark is a station; north is up. There is no base map: the stations alone draw the city. Click a station to see its week.</figcaption>
+          <figcaption class="cap" id="map-cap">Each mark is a station. Click one to see its week. North is up. Hairlines are the arrondissements of Paris; the grey band is the Seine.</figcaption>
         </figure>
         <dl class="readout">
           <div><dt class="label">Clusters</dt><dd id="r-k">4</dd></div>
@@ -186,19 +186,21 @@
     <h2 id="method-h">How it was built</h2>
     <div class="prose">
       <p>I first did this analysis in 2021 as a course exam. This is a rebuild as an R pipeline, and it corrects three things. The original added each station’s average as an extra column and clustered on it, counting the fill level twice. It used complete linkage, which chases outliers. And it picked four clusters by looking at a plot.</p>
-      <p>Here the stations are clustered with k-means, checked against Ward’s method and a Gaussian mixture, and the number of clusters is examined with the gap statistic, silhouettes and a bootstrap. Geography is kept out of the clustering and used only afterwards, as a test.</p>
+      <p>Here the stations are clustered with k-means, checked against Ward’s method and a Gaussian mixture, and the number of clusters is examined with the gap statistic, silhouettes and a bootstrap. Geography is kept out of the clustering and used only afterwards, as a test. The outline of Paris under the stations is there for the reader; the algorithm never sees it.</p>
       <p>The map is not a picture. Your browser holds every station’s week and the cluster centres, and works out each station’s distances and its place on the two components itself. A test checks that arithmetic against values computed in R.</p>
     </div>
 <pre class="flow" aria-label="Pipeline">velib.Rdata ── 1,189 stations × 168 hours
  ├─ pca.R       principal components
  ├─ cluster.R   k-means, Ward, mixtures; gap, silhouette, bootstrap
  ├─ spatial.R   are clusters neighbourhoods? (permutation tests)
+ ├─ basemap.R   arrondissements and the Seine, simplified
  └─ export.R    stations.json, story.json ──→ this page
                 fixtures.json             ──→ parity test (R = JS)</pre>
     <ul class="links">
       <li><a href="report/">Read the full analysis</a><span>methods, diagnostics and what changed since 2021</span></li>
       <li><a href="https://github.com/mcrimi/velib_weekly_cluster_analysis" rel="noopener">Source on GitHub</a><span>R pipeline, tests and this page</span></li>
       <li><a href="https://doi.org/10.1214/15-AOAS861" rel="noopener">The data</a><span>Bouveyron, Côme and Jacques, 2015</span></li>
+      <li><a href="https://opendata.paris.fr/" rel="noopener">The base map</a><span>arrondissements and waterways, Ville de Paris open data, ODbL</span></li>
     </ul>
     <p class="fine">Built by <a href="/">Mariano Crimi</a>. One week of one city in 2014; the Vélib system has since been replaced.</p>
   </section>

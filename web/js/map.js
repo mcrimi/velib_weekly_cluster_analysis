@@ -20,7 +20,29 @@ export function fitMap(xs, ys, width, pad = 14) {
     px[i] = pad + (xs[i] - x0) * scale;
     py[i] = pad + (y1 - ys[i]) * scale;
   }
-  return { width, height, scale, px, py };
+  // The same projection for anything else in kilometre coordinates.
+  const toX = (x) => pad + (x - x0) * scale;
+  const toY = (y) => pad + (y1 - y) * scale;
+  return { width, height, scale, px, py, toX, toY };
+}
+
+function ringPath(ctx, ring, layout) {
+  ctx.moveTo(layout.toX(ring.x[0]), layout.toY(ring.y[0]));
+  for (let i = 1; i < ring.x.length; i += 1) ctx.lineTo(layout.toX(ring.x[i]), layout.toY(ring.y[i]));
+  ctx.closePath();
+}
+
+/** Waterways as a flat tint and arrondissement boundaries as hairlines. */
+function drawBase(ctx, c, base, layout) {
+  ctx.fillStyle = c.line;
+  ctx.beginPath();
+  for (const ring of base.water) ringPath(ctx, ring, layout);
+  ctx.fill();
+  ctx.strokeStyle = c.line;
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  for (const ring of base.boundaries) ringPath(ctx, ring, layout);
+  ctx.stroke();
 }
 
 /** The station closest to a point, or -1 if none is within reach. */
@@ -69,7 +91,8 @@ function drawMarker(ctx, c, marker, x, y, s) {
 }
 
 /**
- * state: { view: "clusters" | "fill", assign, markers, focus, fill, uphill, selected }
+ * state: { view: "clusters" | "fill", assign, markers, focus, fill, uphill, selected, base }
+ *   base     { water, boundaries }: rings in the stations' coordinates, or null
  *   assign   cluster index per station
  *   markers  marker spec per cluster
  *   focus    cluster index to single out, or null
@@ -90,6 +113,8 @@ export function drawMap(canvas, xs, ys, state) {
   ctx.fillStyle = c.paper;
   ctx.fillRect(0, 0, width, layout.height);
 
+  if (state.base) drawBase(ctx, c, state.base, layout);
+
   const { px, py } = layout;
   const unit = Math.max(3.5, Math.min(6, width / 125));
 
@@ -103,9 +128,9 @@ export function drawMap(canvas, xs, ys, state) {
   } else {
     // Faded clusters first, so the one in focus is drawn on top.
     if (state.focus !== null) {
-      ctx.fillStyle = c.line;
+      ctx.fillStyle = c.ink2;
       for (let i = 0; i < px.length; i += 1) {
-        if (state.assign[i] !== state.focus) ctx.fillRect(px[i] - 1, py[i] - 1, 2, 2);
+        if (state.assign[i] !== state.focus) ctx.fillRect(px[i] - 0.5, py[i] - 0.5, 1, 1);
       }
     }
     for (let i = 0; i < px.length; i += 1) {
