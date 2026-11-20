@@ -1,0 +1,21 @@
+Package: velibclusters
+Title: Cluster Analysis of Paris Velib Bike-Sharing Stations
+Version: 2.0.0
+Description: Analysis project, not an installable package. This file lists
+    the R packages the pipeline needs, for renv and for continuous integration.
+License: MIT + file LICENSE
+Depends:
+    R (>= 4.4)
+Imports:
+    cluster,
+    ggplot2,
+    jsonlite,
+    knitr,
+    mclust,
+    quarto,
+    rmarkdown,
+    scales,
+    tarchetypes,
+    targets,
+    testthat,
+    withr

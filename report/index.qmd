@@ -1,0 +1,380 @@
+---
+title: "Paris, drawn by its bikes"
+subtitle: "A cluster analysis of 1,189 Vélib stations, redone properly"
+author: "Mariano Crimi"
+format:
+  html:
+    toc: true
+    toc-depth: 2
+    embed-resources: true
+    theme: none
+    minimal: true
+    css: paper.css
+    include-in-header: header.html
+    include-before-body: before.html
+    highlight-style: none
+    code-fold: true
+    code-summary: "Code"
+    fig-width: 7
+    fig-height: 4.2
+    fig-dpi: 160
+    df-print: kable
+execute:
+  echo: true
+  warning: false
+  message: false
+knitr:
+  opts_knit:
+    root.dir: ".."
+---
+
+```{r setup}
+#| include: false
+library(targets)
+library(ggplot2)
+tar_source("R")
+tar_load(c(velib, summary, pca, components_90, kmeans_fits, ward, mixtures, gap, stability,
+           validity, benchmark, neighbours, spatial, moran, bonus))
+
+ink <- "#1B1B19"
+theme_set(
+  theme_minimal(base_size = 11) +
+    theme(
+      text = element_text(colour = ink), axis.text = element_text(colour = ink),
+      panel.grid = element_blank(), axis.line = element_line(linewidth = 0.3),
+      axis.ticks = element_line(linewidth = 0.3), legend.position = "bottom",
+      # White, so the image can be blended onto whichever paper the reader chose.
+      plot.background = element_rect(fill = "white", colour = NA),
+      strip.text = element_text(colour = ink, hjust = 0, face = "bold"),
+      plot.title.position = "plot"
+    )
+)
+pct <- function(x, digits = 0) sprintf(paste0("%.", digits, "f%%"), 100 * x)
+num <- function(x, digits = 2) formatC(x, format = "f", digits = digits)
+X <- velib$profiles
+time <- velib$time
+four <- kmeans_fits[[3]]
+groups <- describe_clusters(velib, summary, four$cluster)
+labels <- vapply(groups, function(g) g$label, character(1))
+at <- function(table, k, column) table[[column]][table$k == k]
+day_axis <- scale_x_continuous(breaks = seq(12, 156, 24), labels = DAYS, expand = c(0, 0))
+day_lines <- geom_vline(xintercept = seq(24, 144, 24), linewidth = 0.2, colour = "grey75")
+shapes <- c(15, 6, 17, 0)
+```
+
+## Summary
+
+This is a rework of an exam I wrote in 2021. The data are one week of hourly readings from
+the `r nrow(X)` stations of Vélib, the Paris bike-sharing system. The question is whether
+stations fall into types, and what the types mean.
+
+- **Two patterns carry `r pct(sum(pca$explained[1:2]))` of the variation between stations.**
+  The first (`r pct(pca$explained[1])`) is how full a station is all week. The second
+  (`r pct(pca$explained[2])`) is whether it fills or empties during the working day.
+- **Clusters built from timetables alone are neighbourhoods.** With four clusters,
+  `r pct(at(spatial, 4, "observed"))` of a station's six nearest neighbours share its cluster.
+  Random labels would give `r pct(at(spatial, 4, "expected"))`. The clustering was never given
+  a coordinate.
+- **The empty cluster is the hills.** `r pct(bonus$emptiest_cluster_share)` of the
+  `r bonus$n` uphill "bonus" stations fall in one cluster, the one that is nearly always
+  empty. They hold bikes in `r pct(bonus$mean_fill_bonus)` of their docks, against
+  `r pct(bonus$mean_fill_other)` elsewhere.
+- **There is no natural number of clusters.** Silhouettes are low
+  (at most `r num(max(validity$silhouette))`), the gap statistic never peaks, and three
+  clustering methods agree only partly. The stations form a continuum. But cutting it into
+  two, three or four is repeatable under resampling (adjusted Rand index
+  `r num(at(validity, 4, "stability_ari"))` at four), and cutting it into five is not
+  (`r num(at(validity, 5, "stability_ari"))`).
+- **The 2021 version made three mistakes** that this one corrects: it clustered on a column
+  that duplicated information, used a linkage that chases outliers, and chose the number of
+  clusters by eye.
+
+The [web page](../) lets you explore the map.
+
+## Data
+
+The dataset comes from Bouveyron, Côme and Jacques
+([2015](https://doi.org/10.1214/15-AOAS861)), who collected it from the operator's open data
+feed and distribute it with the R package `funFEM`. Each station reports its *loading*: the
+share of its docks holding a bike, between 0 and 1, once an hour. Alongside are each
+station's coordinates and a flag for "bonus" stations, which sit on high ground. The operator
+rewarded riders for returning bikes there, because people ride down from them and do not
+ride back up.
+
+The outline of Paris on the [web page](../) (arrondissements and waterways) is from the City
+of Paris open data portal, under the Open Database Licence. It is drawn for the reader and
+plays no part in the analysis.
+
+The recording starts on a Sunday at 11:00. Those first 13 hours are an incomplete day and
+are dropped, leaving `r ncol(X)` hours from Monday 00:00 to Sunday 23:00. There are no
+missing values.
+
+```{r week}
+#| fig-cap: "Average loading across all stations, hour by hour. The bikes are conserved, so the average barely moves: what changes over the day is where they are."
+#| fig-height: 2.8
+ggplot(data.frame(hour = time$index - 0.5, loading = colMeans(X)), aes(hour, loading)) +
+  day_lines + geom_line(linewidth = 0.4) + day_axis +
+  scale_y_continuous(labels = scales::percent, limits = c(0, 1)) +
+  labs(x = NULL, y = "Docks holding a bike")
+```
+
+## What was wrong with the first version
+
+| 2021 notebook | This version | Why |
+|---|---|---|
+| Appended each station's weekly mean to the data, then ran PCA, k-means and hierarchical clustering on all 169 columns | Clusters on the 168 hourly loadings only | The mean is a linear combination of the other columns. Adding it counts the overall level twice and changes every distance |
+| Hierarchical clustering with complete linkage | Ward's method | Complete linkage merges on the single most distant pair, so a few odd stations decide the tree. Ward minimises within-cluster variance, the same criterion as k-means |
+| Chose four clusters by looking at a curve of explained variance | Gap statistic, silhouette, bootstrap stability, and a no-cluster benchmark | "The elbow looks like four" is not evidence. It turns out four is defensible, but for a different reason |
+| Described the map by eye | Permutation test of spatial coherence | The claim that clusters are neighbourhoods can be tested |
+| Random starts without a seed | Seeded, cluster labels ordered by fill level | Results did not reproduce from run to run |
+
+## Two components
+
+```{r pca}
+#| fig-cap: "Weight of each hour in the first two principal components."
+#| fig-height: 3.2
+loadings <- data.frame(hour = rep(time$index - 0.5, 2),
+                       component = rep(c("1: fill level", "2: working day"), each = 168),
+                       weight = c(pca$rotation[, 1], pca$rotation[, 2]))
+ggplot(loadings, aes(hour, weight, linetype = component)) +
+  day_lines + geom_hline(yintercept = 0, linewidth = 0.2) + geom_line(linewidth = 0.4) +
+  day_axis + labs(x = NULL, y = "Loading", linetype = NULL)
+```
+
+The analysis is on the covariance matrix: all 168 columns are on the same scale, so they are
+centred but not standardised.
+
+The first component has the same sign at every hour. A station's score on it correlates
+`r num(cor(pca_scores(pca, X, 1)[, 1], summary$mean_fill), 3)` with its weekly mean: it is
+the fill level. The second is positive from about nine to six on weekdays and negative at
+night, with a weaker and later version of the same shape at the weekend. Stations with a
+high score receive bikes during the working day; stations with a low score send them.
+
+After that the components fall away quickly (`r pct(pca$explained[3], 1)`,
+`r pct(pca$explained[4], 1)`, ...). Reaching 90% of the variance takes `r components_90`
+components, so two dimensions are a summary, not the whole story. Clustering is therefore
+done on all 168 hours, not on the scores.
+
+Both components are strongly organised in space, which already hints at what the clustering
+will find. Moran's I, with each station's six nearest neighbours as its neighbourhood, is
+`r num(moran[[1]]$observed)` for the first component and `r num(moran[[2]]$observed)` for the
+second (0 means no spatial pattern; both p = `r num(moran[[1]]$p, 3)` by permutation).
+
+## How many clusters?
+
+```{r validity}
+tab <- data.frame(
+  K = validity$k,
+  `Variance explained` = pct(validity$r2),
+  Silhouette = num(validity$silhouette),
+  `Silhouette, no clusters` = num(benchmark$silhouette),
+  Gap = num(validity$gap),
+  `Stability (ARI)` = num(validity$stability_ari),
+  `Stability, no clusters` = num(benchmark$stability_ari),
+  `Weakest cluster (Jaccard)` = num(validity$weakest_jaccard),
+  check.names = FALSE
+)
+knitr::kable(tab, align = "r")
+```
+
+Four different questions are being asked here.
+
+**Are the groups separated?** No. The average silhouette width is
+`r num(max(validity$silhouette))` at best. Kaufman and Rousseeuw's rule of thumb reads 0.26
+to 0.50 as weak structure that could be artificial, and 0.25 or below as none.
+
+**Is there more clustering than in structureless data?** A little. The "no clusters" columns
+come from a simulated dataset with the same covariance as the real one but drawn from a
+single Gaussian: an ellipsoidal cloud with no groups in it. k-means will happily cut such a
+cloud into pieces, and its silhouettes (`r num(at(benchmark, 4, "silhouette"))` at K = 4) are
+not far below the real ones (`r num(at(validity, 4, "silhouette"))`).
+
+**Does some K stand out?** No. The gap statistic rises all the way to K = 8, so the usual
+rule picks the largest K offered (`r gap$chosen`). The mixture model's BIC does the same up
+to K = `r mixtures$bic$k[which.max(mixtures$bic$bic)]`. Neither is a sign of
+`r gap$chosen` real groups; it is what happens when a smooth distribution is approximated
+by more and more pieces.
+
+**Is the partition repeatable?** Up to four, yes. Stability is measured by drawing 100
+bootstrap samples of stations, clustering each, assigning every station to its nearest new
+centre and comparing with the original partition by the adjusted Rand index (1 is identical,
+0 is chance).
+
+```{r stability}
+#| fig-cap: "Bootstrap stability of the k-means partition. Bars: 10th to 90th percentile over 100 resamples. Dashed: simulated data with no clusters."
+#| fig-height: 3.2
+stab <- do.call(rbind, lapply(seq_along(stability), function(i) {
+  q <- quantile(stability[[i]]$ari, c(0.1, 0.9))
+  data.frame(k = validity$k[i], mean = mean(stability[[i]]$ari), lo = q[1], hi = q[2])
+}))
+ggplot(stab, aes(k, mean)) +
+  geom_line(data = benchmark, aes(k, stability_ari), linetype = "dashed", linewidth = 0.4) +
+  geom_linerange(aes(ymin = lo, ymax = hi), linewidth = 0.4) +
+  geom_line(linewidth = 0.4) + geom_point(shape = 15, size = 1.8) +
+  scale_x_continuous(breaks = validity$k) + coord_cartesian(ylim = c(0.4, 1)) +
+  labs(x = "Number of clusters", y = "Adjusted Rand index")
+```
+
+At two, three and four clusters the partition comes back almost unchanged
+(`r num(at(validity, 2, "stability_ari"))`, `r num(at(validity, 3, "stability_ari"))`,
+`r num(at(validity, 4, "stability_ari"))`), far above the structureless benchmark. At five it
+drops to `r num(at(validity, 5, "stability_ari"))`, and its least stable cluster overlaps
+its bootstrap counterpart by only `r pct(at(validity, 5, "weakest_jaccard"))`.
+
+So the honest description is this. The stations are a continuum with two strong directions
+in it. There are no gaps to find. But the continuum is not round, and the first few cuts
+through it fall in the same places every time. Four is the finest resolution that holds
+still, and that is the reason to use it. It is a choice of resolution, not a count of
+species.
+
+### Do the methods agree?
+
+```{r agreement}
+knitr::kable(data.frame(
+  K = validity$k,
+  `k-means vs Ward` = num(validity$ari_ward),
+  `k-means vs Gaussian mixture` = num(validity$ari_mixture),
+  `Mixture covariance model` = mixtures$bic$model[-1],
+  check.names = FALSE
+), align = "r")
+```
+
+Ward's method, which optimises the same criterion greedily, agrees fairly well with k-means
+at four clusters (ARI `r num(at(validity, 4, "ari_ward"))`). A Gaussian mixture on the first
+five principal components (`r pct(sum(pca$explained[1:5]))` of the variance) agrees much
+less (`r num(at(validity, 4, "ari_mixture"))`). It is free to fit elongated, overlapping
+components of different sizes, and with no gaps in the data to constrain it, it draws the
+boundaries elsewhere. That disagreement is further evidence for a continuum: when groups are
+real, methods find the same ones.
+
+## The four clusters
+
+```{r profiles}
+#| fig-cap: "Mean loading of each cluster over the week."
+#| fig-height: 5.2
+centres <- do.call(rbind, lapply(groups, function(g) {
+  data.frame(hour = time$index - 0.5, loading = g$centre,
+             cluster = sprintf("%s (%d stations)", g$label, g$n))
+}))
+centres$cluster <- factor(centres$cluster, unique(centres$cluster))
+ggplot(centres, aes(hour, loading)) + day_lines + geom_line(linewidth = 0.4) +
+  facet_wrap(~cluster, ncol = 1) + day_axis +
+  scale_y_continuous(labels = scales::percent, limits = c(0, 1), breaks = c(0, 0.5, 1)) +
+  labs(x = NULL, y = "Docks holding a bike")
+```
+
+```{r describe}
+knitr::kable(data.frame(
+  Cluster = labels,
+  Stations = vapply(groups, function(g) g$n, numeric(1)),
+  `Mean loading` = pct(vapply(groups, function(g) g$mean_fill, numeric(1))),
+  `Day minus night` = sprintf("%+.2f", vapply(groups, function(g) g$day_night, numeric(1))),
+  `Bonus stations` = bonus$by_cluster$bonus,
+  check.names = FALSE
+), align = "lrrrr")
+```
+
+Cluster names are generated from two descriptors: the mean loading, and the weekday
+difference between working hours (10:00 to 16:00) and the small hours (01:00 to 06:00).
+Neither was used to form the clusters.
+
+```{r scores}
+#| fig-cap: "Stations on the first two principal components, marked by cluster. There are no gaps between the groups: the boundaries are cuts through a continuous cloud."
+#| fig-height: 4.6
+scores <- as.data.frame(pca_scores(pca, X, 2))
+names(scores) <- c("pc1", "pc2")
+scores$cluster <- factor(labels[four$cluster], labels)
+ggplot(scores, aes(pc1, pc2, shape = cluster)) + geom_point(size = 1.1, stroke = 0.3) +
+  scale_shape_manual(values = shapes) + coord_equal() +
+  labs(x = "Component 1: fill level", y = "Component 2: working day", shape = NULL) +
+  guides(shape = guide_legend(nrow = 2, override.aes = list(size = 2)))
+```
+
+## Are the clusters neighbourhoods?
+
+```{r map}
+#| fig-cap: "The stations, marked by cluster. Coordinates played no part in forming the clusters."
+#| fig-height: 5
+map <- data.frame(velib$stations[c("x", "y")], cluster = factor(labels[four$cluster], labels))
+ggplot(map, aes(x, y, shape = cluster)) + geom_point(size = 1.1, stroke = 0.3) +
+  scale_shape_manual(values = shapes) + coord_equal() +
+  labs(x = "km east of centre", y = "km north of centre", shape = NULL) +
+  guides(shape = guide_legend(nrow = 2, override.aes = list(size = 2)))
+```
+
+The test is a join count. For every station, take its six nearest neighbours and count how
+many share its cluster. Then shuffle the cluster labels over the stations 999 times and
+count again. If where a station is had nothing to do with how it behaves, the observed share
+would look like the shuffled ones.
+
+```{r spatial}
+knitr::kable(data.frame(
+  K = spatial$k,
+  `Neighbours in same cluster` = pct(spatial$observed, 1),
+  `Expected if random` = pct(spatial$expected, 1),
+  `Highest of 999 shuffles` = pct(spatial$null_max, 1),
+  z = num(spatial$z, 1),
+  check.names = FALSE
+), align = "r")
+```
+
+At every resolution the observed share is more than twice what chance gives and far beyond
+anything the shuffles produced. A station's timetable is, to a large degree, a statement
+about where it is.
+
+This is not circular, but it is not mysterious either. Bikes move between nearby stations,
+and nearby stations share the same land use and the same slope. The clustering recovers
+geography because geography is what drives the timetable.
+
+### The hills
+
+The bonus flag gives an independent check on one cluster. It marks stations on high ground.
+
+```{r bonus}
+#| fig-cap: "Weekly mean loading of bonus (uphill) stations and all others."
+#| fig-height: 2.6
+ggplot(data.frame(fill = summary$mean_fill,
+                  kind = ifelse(velib$stations$bonus, "Bonus (uphill)", "Other")),
+       aes(fill, kind)) +
+  geom_boxplot(linewidth = 0.3, outlier.size = 0.6, width = 0.5) +
+  scale_x_continuous(labels = scales::percent, limits = c(0, 1)) +
+  labs(x = "Mean share of docks holding a bike", y = NULL)
+```
+
+The `r bonus$n` bonus stations hold bikes in `r pct(bonus$mean_fill_bonus)` of their docks
+on average, against `r pct(bonus$mean_fill_other)` for the rest. A randomly chosen bonus
+station is emptier than a randomly chosen other station `r pct(bonus$prob_emptier)` of the
+time. And `r bonus$by_cluster$bonus[4]` of the `r bonus$n`
+(`r pct(bonus$emptiest_cluster_share)`) are in the "`r labels[4]`" cluster, which the
+algorithm found without knowing which stations they were. That cluster is larger than the
+hills, though: `r pct(1 - bonus$by_cluster$share[4])` of its stations are not bonus stations.
+It also takes in much of the outer ring of the city.
+
+## Limitations
+
+- **One week.** Early September 2014, with whatever weather and events it had. Nothing here
+  says the pattern holds in February. The system itself was replaced in 2018.
+- **Loading is not demand.** A station at 0% tells you bikes were wanted and not how many.
+  A full station hides people who wanted to return a bike and could not. The operator also
+  moves bikes by truck, and that is in the data too.
+- **Hours are treated as unordered columns.** Euclidean distance on 168 columns does not
+  know that 08:00 and 09:00 are adjacent, so two stations with the same rush an hour apart
+  look as different as two unrelated ones. The functional methods of the original paper
+  address this; they are not reproduced here.
+- **Names for clusters are a convenience.** "Fills by day" describes a cluster's average. The
+  stations in it range continuously into their neighbours.
+- **The geography is described, not modelled.** No land-use, altitude or transit data were
+  joined. "Business core" and "residential" are readings of the map.
+
+## Reproducing this
+
+```sh
+Rscript -e 'renv::restore()'
+Rscript -e 'targets::tar_make()'    # data -> models -> validation -> JSON -> this report
+Rscript -e 'testthat::test_dir("tests/testthat")'
+npm test                            # the page's arithmetic, checked against R
+```
+
+The page assigns stations to cluster centres and projects them onto the principal components
+in JavaScript. The pipeline exports fixtures computed in R from the same JSON the page
+loads, and a test requires the JavaScript to reproduce them.

@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Paris, drawn by its bikes · Mariano Crimi</title>
+<meta name="description" content="A cluster analysis of 1,189 Vélib bike-sharing stations in Paris. Group the stations by how they fill and empty over a week and the map of the city appears.">
+<link rel="canonical" href="https://marianocrimi.com/velib/">
+<meta property="og:title" content="Paris, drawn by its bikes">
+<meta property="og:description" content="Group 1,189 Vélib stations by their weekly rhythm alone and the map of Paris appears.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://marianocrimi.com/velib/">
+<meta property="og:image" content="https://marianocrimi.com/assets/img/og.png">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' fill='%231B1B19'/%3E%3Cpath d='M3.5 12V4l4.5 5 4.5-5v8' fill='none' stroke='%23ECEBE6' stroke-width='1.6'/%3E%3C/svg%3E">
+<script>
+  // Follow the reading settings chosen on marianocrimi.com (same storage key).
+  (function () {
+    var s = {};
+    try { s = JSON.parse(localStorage.getItem("mcrimi-site") || "{}") || {}; } catch (e) {}
+    var root = document.documentElement;
+    root.dataset.theme = s.paper === "night" ? "dark" : "light";
+    if (s.paper === "grey") root.dataset.paper = "grey";
+    root.dataset.font = s.font === "garamond" || s.font === "charter" ? s.font : "literata";
+    if (s.size === "s" || s.size === "l") root.dataset.size = s.size;
+  })();
+</script>
+<link rel="stylesheet" href="velib.css">
+<script type="module" src="js/app.js"></script>
+</head>
+<body>
+<header class="topbar">
+  <div class="in gut">
+    <a class="mark" href="/#portfolio" aria-label="Back to the portfolio on marianocrimi.com">← Portfolio</a>
+    <nav class="nav" aria-label="On this page">
+      <a href="#map">Map</a>
+      <a href="#findings">Findings</a>
+      <a href="#method">Method</a>
+    </nav>
+    <div class="status">
+      <button class="aa" id="aa" type="button" aria-expanded="false" aria-controls="panel" aria-label="Paper settings">Aa</button>
+    </div>
+    <div class="panel" id="panel" hidden>
+      <div class="grp">
+        <span class="label">Paper</span>
+        <div class="seg" role="group" aria-label="Paper">
+          <button type="button" data-paper="warm">Warm</button>
+          <button type="button" data-paper="grey">Grey</button>
+          <button type="button" data-paper="night">Night</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<main class="wrap gut">
+
+  <section id="map" aria-labelledby="map-h">
+    <p class="label">Cluster analysis · R</p>
+    <h1 id="map-h">Paris, drawn by its bikes</h1>
+    <p class="dek">For one week in 2014 every Vélib station in Paris reported how full it was, hour by hour. Group the stations by that rhythm alone, without telling the algorithm where anything is, and it draws the neighbourhoods of the city.</p>
+
+    <div class="sim">
+      <form id="controls" class="controls" aria-label="Map settings">
+        <div class="field wide">
+          <span class="label">Show</span>
+          <div class="seg" id="view" role="group" aria-label="What the map shows">
+            <button type="button" data-view="clusters" aria-pressed="true">Clusters</button>
+            <button type="button" data-view="fill" aria-pressed="false">Bikes by hour</button>
+          </div>
+        </div>
+        <div class="field wide">
+          <span class="label">Number of clusters</span>
+          <div class="seg" id="ks" role="group" aria-label="Number of clusters"></div>
+        </div>
+        <label class="field wide">
+          <span class="row"><span class="label">Hour of the week</span><output id="hour-out" for="hour"></output></span>
+          <input type="range" id="hour" min="0" max="167" step="1" value="32">
+        </label>
+        <div class="field wide">
+          <div class="buttons">
+            <button type="button" class="btn primary" id="play">Play the week</button>
+            <button type="button" class="btn" id="uphill" aria-pressed="false">Mark the hills</button>
+          </div>
+        </div>
+        <div class="field wide">
+          <span class="label">Clusters · select one to single it out</span>
+          <ul class="legend" id="legend"></ul>
+        </div>
+        <noscript><p>This page draws a map from data and needs JavaScript. The <a href="report/">full analysis</a> reads without it.</p></noscript>
+      </form>
+
+      <div class="result">
+        <figure class="plate">
+          <canvas id="stations" width="900" height="560" role="img" aria-label="Map of the 1,189 stations, each drawn with the marker of its cluster"></canvas>
+          <figcaption class="cap" id="map-cap">Each mark is a station. Click one to see its week. North is up. Hairlines are the arrondissements of Paris; the grey band is the Seine.</figcaption>
+        </figure>
+        <dl class="readout">
+          <div><dt class="label">Clusters</dt><dd id="r-k">4</dd></div>
+          <div><dt class="label">Stability</dt><dd id="r-stability">–</dd></div>
+          <div><dt class="label">Silhouette</dt><dd id="r-silhouette">–</dd></div>
+          <div><dt class="label">Neighbours alike</dt><dd id="r-neighbours">–</dd></div>
+        </dl>
+        <p class="verdict" id="verdict" aria-live="polite">Loading the stations…</p>
+        <p class="fine" id="verdict-fine"></p>
+
+        <div class="station" id="station" hidden>
+          <div>
+            <p class="label">Station</p>
+            <h3 id="s-name"></h3>
+            <dl>
+              <div><dt class="label">Cluster</dt><dd id="s-cluster"></dd></div>
+              <div><dt class="label">Bikes in docks, on average</dt><dd id="s-mean"></dd></div>
+              <div><dt class="label">Fit</dt><dd id="s-fit"></dd></div>
+            </dl>
+            <div class="buttons" style="margin-top:1rem"><button type="button" class="btn" id="random">Another station</button></div>
+          </div>
+          <figure class="chart">
+            <svg id="station-chart" role="img" aria-labelledby="station-cap"></svg>
+            <figcaption id="station-cap" class="cap">Share of docks holding a bike, Monday to Sunday. Solid: this station. Dashed: the average of its cluster. The vertical line is the hour shown.</figcaption>
+          </figure>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="findings" aria-labelledby="findings-h">
+    <h2 id="findings-h">What the data says</h2>
+
+    <h3>1. Two numbers describe most of a station</h3>
+    <div class="prose">
+      <p>Each station is a row of 168 numbers: the share of its docks holding a bike at each hour of the week. A principal component analysis finds that two patterns carry <span data-fill="pc12">64</span>% of all the variation between stations.</p>
+      <p>The first (<span data-fill="pc1">40</span>%) is simply how full a station is, all week. The second (<span data-fill="pc2">24</span>%) is the working day: stations that fill up between nine and six and empty at night, against stations that do the opposite. Offices on one side, bedrooms on the other.</p>
+    </div>
+    <figure class="chart">
+      <svg id="loadings-chart" role="img" aria-labelledby="loadings-cap"></svg>
+      <figcaption id="loadings-cap" class="cap">Weight of each hour of the week in the first two principal components.</figcaption>
+    </figure>
+
+    <h3>2. Clusters made from timetables turn out to be neighbourhoods</h3>
+    <div class="prose">
+      <p>The clustering sees only those 168 numbers. It is never given a coordinate. Yet with four clusters, <span data-fill="nb-observed">67</span>% of a station’s six nearest neighbours belong to the same cluster as the station itself. If cluster labels were dealt out at random it would be <span data-fill="nb-expected">27</span>%, and in 999 random deals the highest share was <span data-fill="nb-max">30</span>%.</p>
+      <p>The four groups are easy to name, and roughly easy to place. One fills by day: the business core of the right bank, around the Opéra. One empties by day: the residential north-east and south. One is nearly always full: the low ground along the Seine and the south-west. And one is nearly always empty: an arc across the northern heights and a block of high ground in the south.</p>
+    </div>
+    <div class="pair">
+      <figure class="chart">
+        <svg id="weekday-chart" role="img" aria-labelledby="weekday-cap"></svg>
+        <figcaption id="weekday-cap" class="cap">Average weekday of each of the four clusters: share of docks holding a bike, by hour.</figcaption>
+      </figure>
+      <figure class="chart">
+        <svg id="spatial-chart" role="img" aria-labelledby="spatial-cap"></svg>
+        <figcaption id="spatial-cap" class="cap">Share of nearest neighbours in the same cluster, by number of clusters. Dashed: what random labels give.</figcaption>
+      </figure>
+    </div>
+
+    <h3>3. The empty cluster is the hills</h3>
+    <div class="prose">
+      <p>People ride bikes downhill and take the metro back up. The operator knew it: <span data-fill="bonus-n">127</span> stations on high ground were “bonus” stations, where returning a bike earned free riding time. The data does not say which stations those are until after the clustering, so they make a fair test.</p>
+      <p>Bonus stations had bikes in <span data-fill="bonus-fill">16</span>% of their docks on average, against <span data-fill="other-fill">41</span>% elsewhere. And <span data-fill="bonus-share">94</span>% of them landed in the “empty” cluster. Press <em>Mark the hills</em> above the map to see them: Montmartre, Belleville, Ménilmontant.</p>
+    </div>
+    <div class="table-wrap">
+      <table id="bonus-table" class="data">
+        <caption class="label">The four clusters, and where the bonus stations fell</caption>
+        <thead><tr><th scope="col">Cluster</th><th scope="col" class="n">Stations</th><th scope="col" class="n">Average fill</th><th scope="col" class="n">Bonus stations</th><th scope="col" class="n">Share bonus</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+
+    <h3>4. But there is no right number of clusters</h3>
+    <div class="prose">
+      <p>Four is a choice, not a discovery. The usual tests for a natural number of groups all decline to name one. The average silhouette never exceeds <span data-fill="sil-max">0.28</span>, where well-separated groups score above 0.5. The gap statistic keeps rising for as long as clusters are added. And a different method, a Gaussian mixture, agrees with k-means only loosely.</p>
+      <p>The stations form a continuum, not islands: there is every shade between an office district and a dormitory. What can be said is that cutting the continuum into two, three or four pieces is <em>repeatable</em>. Resample the stations and re-run the clustering, and the same four groups come back (agreement <span data-fill="stab-4">0.95</span> on a scale where 1 is identical). At five the agreement falls to <span data-fill="stab-5">0.80</span>. Four is the finest cut that holds still, which is why the map starts there.</p>
+    </div>
+    <div class="pair">
+      <figure class="chart">
+        <svg id="stability-chart" role="img" aria-labelledby="stability-cap"></svg>
+        <figcaption id="stability-cap" class="cap">Stability: agreement (adjusted Rand index) between the clustering and 100 re-runs on resampled stations. Dashed: the same on simulated data with no clusters.</figcaption>
+      </figure>
+      <figure class="chart">
+        <svg id="silhouette-chart" role="img" aria-labelledby="silhouette-cap"></svg>
+        <figcaption id="silhouette-cap" class="cap">Average silhouette width. Dashed: simulated data with no clusters. The real stations are only a little more separated.</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section id="method" aria-labelledby="method-h">
+    <h2 id="method-h">How it was built</h2>
+    <div class="prose">
+      <p>I first did this analysis in 2021 as a course exam. This is a rebuild as an R pipeline, and it corrects three things. The original added each station’s average as an extra column and clustered on it, counting the fill level twice. It used complete linkage, which chases outliers. And it picked four clusters by looking at a plot.</p>
+      <p>Here the stations are clustered with k-means, checked against Ward’s method and a Gaussian mixture, and the number of clusters is examined with the gap statistic, silhouettes and a bootstrap. Geography is kept out of the clustering and used only afterwards, as a test. The outline of Paris under the stations is there for the reader; the algorithm never sees it.</p>
+      <p>The map is not a picture. Your browser holds every station’s week and the cluster centres, and works out each station’s distances and its place on the two components itself. A test checks that arithmetic against values computed in R.</p>
+    </div>
+<pre class="flow" aria-label="Pipeline">velib.Rdata ── 1,189 stations × 168 hours
+ ├─ pca.R       principal components
+ ├─ cluster.R   k-means, Ward, mixtures; gap, silhouette, bootstrap
+ ├─ spatial.R   are clusters neighbourhoods? (permutation tests)
+ ├─ basemap.R   arrondissements and the Seine, simplified
+ └─ export.R    stations.json, story.json ──→ this page
+                fixtures.json             ──→ parity test (R = JS)</pre>
+    <ul class="links">
+      <li><a href="report/">Read the full analysis</a><span>methods, diagnostics and what changed since 2021</span></li>
+      <li><a href="https://github.com/mcrimi/velib_weekly_cluster_analysis" rel="noopener">Source on GitHub</a><span>R pipeline, tests and this page</span></li>
+      <li><a href="https://doi.org/10.1214/15-AOAS861" rel="noopener">The data</a><span>Bouveyron, Côme and Jacques, 2015</span></li>
+      <li><a href="https://opendata.paris.fr/" rel="noopener">The base map</a><span>arrondissements and waterways, Ville de Paris open data, ODbL</span></li>
+    </ul>
+    <p class="fine">Built by <a href="/">Mariano Crimi</a>. One week of one city in 2014; the Vélib system has since been replaced.</p>
+  </section>
+
+</main>
+</body>
+</html>

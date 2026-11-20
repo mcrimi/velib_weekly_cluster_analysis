@@ -1,0 +1,36 @@
+cff-version: 1.2.0
+message: "If you use this analysis, please cite it, and cite the dataset authors below."
+title: "Paris, drawn by its bikes: a cluster analysis of Vélib stations"
+authors:
+  - family-names: Crimi
+    given-names: Mariano
+version: 2.0.0
+date-released: 2026-11-20
+url: "https://marianocrimi.com/velib/"
+repository-code: "https://github.com/mcrimi/velib_weekly_cluster_analysis"
+license: MIT
+references:
+  - type: article
+    title: "The discriminative functional mixture model for a comparative analysis of bike sharing systems"
+    authors:
+      - family-names: Bouveyron
+        given-names: Charles
+      - family-names: Côme
+        given-names: Etienne
+      - family-names: Jacques
+        given-names: Julien
+    journal: "The Annals of Applied Statistics"
+    volume: 9
+    issue: 4
+    start: 1726
+    end: 1760
+    year: 2015
+    doi: "10.1214/15-AOAS861"
+  - type: software
+    title: "funFEM: Clustering in the Discriminative Functional Subspace"
+    authors:
+      - family-names: Bouveyron
+        given-names: Charles
+    version: "1.2"
+    year: 2021
+    url: "https://CRAN.R-project.org/package=funFEM"
